@@ -1,91 +1,57 @@
 <?php
 /**
- * Plugin Name: همگام‌سازی محصولات با پارتجو
- * Plugin URI: https://partjoo.com
- * Description: افزونه ارسال خودکار محصولات ووکامرس به موتور جستجوی پارتجو
- * Version: 1.0.0
- * Author: پارتجو
- * Author URI: https://partjoo.com
- * Text Domain: partjoo-sync
+ * Plugin Name: PartJoo Product Sync
+ * Description: Sync WooCommerce products to PartJoo (API v1.2) with change tracking, stats, and deletion handling.
+ * Version: 1.3.0
+ * Author: PartJoo
+ * License: GPLv2 or later
+ * Text Domain: partjoo-product-sync
  * Domain Path: /languages
- * Requires at least: 5.0
- * Requires PHP: 7.2
- * WC requires at least: 3.0
- * WC tested up to: 8.0
  */
 
-// Prevent direct access
-if (!defined('ABSPATH')) {
-    exit;
+if ( ! defined('ABSPATH') ) { exit; }
+
+define('PARTJOO_PLUGIN_VERSION', '1.3.0');
+define('PARTJOO_PLUGIN_FILE', __FILE__);
+define('PARTJOO_PLUGIN_DIR', plugin_dir_path(__FILE__));
+define('PARTJOO_PLUGIN_URL', plugin_dir_url(__FILE__));
+
+require_once PARTJOO_PLUGIN_DIR . 'includes/class-partjoo-state.php';
+require_once PARTJOO_PLUGIN_DIR . 'includes/class-partjoo-product-sync.php';
+require_once PARTJOO_PLUGIN_DIR . 'admin/class-partjoo-admin.php';
+
+// Optional WP-CLI
+if ( defined('WP_CLI') && WP_CLI ) {
+    require_once PARTJOO_PLUGIN_DIR . 'includes/class-partjoo-cli.php';
 }
 
-// Define plugin constants
-define('PARTJOO_SYNC_VERSION', '1.0.0');
-define('PARTJOO_SYNC_PLUGIN_DIR', plugin_dir_path(__FILE__));
-define('PARTJOO_SYNC_PLUGIN_URL', plugin_dir_url(__FILE__));
-define('PARTJOO_SYNC_PLUGIN_BASENAME', plugin_basename(__FILE__));
+function partjoo_ps_load_textdomain() {
+    load_plugin_textdomain('partjoo-product-sync', false, dirname(plugin_basename(__FILE__)) . '/languages');
+}
+add_action('plugins_loaded', 'partjoo_ps_load_textdomain', 1);
 
-// Include required files
-require_once PARTJOO_SYNC_PLUGIN_DIR . 'includes/class-partjoo-product-sync.php';
-
-// Check if WooCommerce is active
-function partjoo_sync_check_woocommerce() {
-    if (!class_exists('WooCommerce')) {
-        add_action('admin_notices', 'partjoo_sync_woocommerce_notice');
-        return false;
+register_activation_hook(__FILE__, function () {
+    PartJoo_State::instance()->install();
+    $opts = PartJoo_State::instance()->get_options();
+    $recurrence = in_array($opts['cron_recurrence'], ['hourly','twicedaily','daily'], true) ? $opts['cron_recurrence'] : 'hourly';
+    if ( ! wp_next_scheduled('partjoo_cron_sync_changed') ) {
+        wp_schedule_event( time() + 60, $recurrence, 'partjoo_cron_sync_changed' );
     }
-    return true;
-}
+});
 
-// Display WooCommerce missing notice
-function partjoo_sync_woocommerce_notice() {
-    ?>
-    <div class="error">
-        <p><?php _e('افزونه همگام‌سازی محصولات با پارتجو نیاز به نصب و فعال‌سازی افزونه ووکامرس دارد.', 'partjoo-sync'); ?></p>
-    </div>
-    <?php
-}
+register_deactivation_hook(__FILE__, function () {
+    $ts = wp_next_scheduled('partjoo_cron_sync_changed');
+    if ( $ts ) wp_unschedule_event($ts, 'partjoo_cron_sync_changed');
+});
 
-// Initialize the plugin
-function partjoo_sync_init() {
-    // Load text domain for translations
-    load_plugin_textdomain('partjoo-sync', false, dirname(plugin_basename(__FILE__)) . '/languages/');
-    
-    // Check if WooCommerce is active
-    if (partjoo_sync_check_woocommerce()) {
-        // Initialize the main plugin class
-        Partjoo_Product_Sync::get_instance();
+add_action('plugins_loaded', function () {
+    if ( class_exists('WooCommerce') ) {
+        PartJoo_Product_Sync::instance();
+        PartJoo_Admin::instance();
     }
-}
-add_action('plugins_loaded', 'partjoo_sync_init');
+});
 
-// Plugin activation
-register_activation_hook(__FILE__, 'partjoo_sync_activate');
-function partjoo_sync_activate() {
-    // Check if WooCommerce is active
-    if (!class_exists('WooCommerce')) {
-        deactivate_plugins(plugin_basename(__FILE__));
-        wp_die(__('افزونه همگام‌سازی محصولات با پارتجو نیاز به نصب و فعال‌سازی افزونه ووکامرس دارد.', 'partjoo-sync'));
-    }
-    
-    // Create default settings
-    $default_settings = array(
-        'domain' => '',
-        'auto_sync' => 'yes',
-        'sync_interval' => 'daily'
-    );
-    
-    add_option('partjoo_sync_settings', $default_settings);
-    
-    // Schedule sync
-    if (!wp_next_scheduled('partjoo_sync_cron_hook')) {
-        wp_schedule_event(time(), 'daily', 'partjoo_sync_cron_hook');
-    }
-}
-
-// Plugin deactivation
-register_deactivation_hook(__FILE__, 'partjoo_sync_deactivate');
-function partjoo_sync_deactivate() {
-    // Clear scheduled hooks
-    wp_clear_scheduled_hook('partjoo_sync_cron_hook');
-}
+// Cron: sync changed
+add_action('partjoo_cron_sync_changed', function () {
+    PartJoo_Product_Sync::instance()->sync_changed_products();
+});

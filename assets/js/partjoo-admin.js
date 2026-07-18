@@ -1,27 +1,20 @@
-/**
- * Admin scripts for Partjoo Product Sync
- */
-(function($) {
-    'use strict';
-    
-    $(document).ready(function() {
-        // Toggle sync interval field based on auto sync setting
-        $('#partjoo_sync_auto_sync').on('change', function() {
-            var $intervalField = $('#partjoo_sync_interval').closest('tr');
-            
-            if ($(this).val() === 'yes') {
-                $intervalField.show();
-            } else {
-                $intervalField.hide();
-            }
-        }).trigger('change');
-        
-        // Confirm manual sync
-        $('a[href*="action=sync_now"]').on('click', function(e) {
-            if (!confirm(partjoo_admin_vars.confirm_sync)) {
-                e.preventDefault();
-            }
+(function ($) {
+    $(document).on('click', '.partjoo-sync-now', function () {
+        var $btn = $(this);
+        var pid = $btn.data('id');
+        var force = $btn.data('force') ? 1 : 0;
+        $btn.prop('disabled', true).text(force ? 'Forcing...' : 'Syncing...');
+        $.post(PartJooAjax.ajaxurl, {
+            action: 'partjoo_sync_single',
+            product_id: pid,
+            force: force,
+            nonce: PartJooAjax.nonce
+        }).done(function (r) {
+            alert((r && r.data && r.data.message) ? r.data.message : 'Done');
+        }).fail(function () {
+            alert('Failed');
+        }).always(function () {
+            $btn.prop('disabled', false).text(force ? 'Force resend' : 'Sync this item');
         });
     });
 })(jQuery);
-

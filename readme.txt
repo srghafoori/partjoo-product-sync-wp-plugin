@@ -1,68 +1,44 @@
-=== همگام‌سازی محصولات با پارتجو ===
+=== PartJoo Product Sync ===
 Contributors: partjoo
-Tags: woocommerce, product, search engine, partjoo
-Requires at least: 5.0
-Tested up to: 6.3
-Stable tag: 1.0.0
-Requires PHP: 7.2
+Tags: woocommerce, products, sync, api
+Requires at least: 5.8
+Tested up to: 6.6
+Requires PHP: 7.4
+Stable tag: 1.3.0
 License: GPLv2 or later
 License URI: https://www.gnu.org/licenses/gpl-2.0.html
 
-افزونه ارسال خودکار محصولات ووکامرس به موتور جستجوی پارتجو
+Sync WooCommerce products to PartJoo search engine via API v1.2, with change tracking, logs, deletion handling, and WP-CLI.
 
 == Description ==
-
-افزونه همگام‌سازی محصولات با پارتجو به شما امکان می‌دهد محصولات فروشگاه ووکامرس خود را به صورت خودکار با موتور جستجوی پارتجو همگام‌سازی کنید.
-
-ویژگی‌های اصلی:
-* همگام‌سازی خودکار محصولات با زمان‌بندی قابل تنظیم
-* همگام‌سازی دستی محصولات
-* همگام‌سازی خودکار هنگام ایجاد یا ویرایش محصول
-* ارسال دسته‌ای محصولات برای کاهش بار سرور
-
-== ساختار پروژه ==
-
-ساختار فایل‌های این افزونه به صورت زیر است:
-
-partjoo-product-sync/
-├── partjoo-product-sync.php          # فایل اصلی افزونه
-├── uninstall.php                     # اسکریپت حذف افزونه
-├── readme.txt                        # مستندات افزونه
-├── includes/                         # کلاس‌ها و توابع اصلی
-│   └── class-partjoo-product-sync.php # کلاس اصلی افزونه
-├── admin/                            # فایل‌های مربوط به پنل مدیریت
-│   ├── class-partjoo-admin.php       # کلاس مدیریت بخش ادمین
-│   └── partjoo-settings-page.php     # قالب صفحه تنظیمات
-├── assets/                           # فایل‌های استاتیک
-│   ├── css/                          # استایل‌ها
-│   │   └── partjoo-admin.css         # استایل‌های پنل مدیریت
-│   └── js/                           # اسکریپت‌ها
-│       └── partjoo-admin.js          # اسکریپت‌های پنل مدیریت
-└── languages/                        # فایل‌های ترجمه
-    └── partjoo-sync-fa_IR.po         # ترجمه فارسی
+- API v1.2 payload (`route=crawler/addProductsToPartjoo`).
+- Sends only changed products using content signatures; Force resend available.
+- Batch sending (max 100).
+- Handles stock/price events and deletions (tombstone -> availability -1).
+- Optional API key header `X-PartJoo-Key` (if provided).
+- Admin UI, logs table, last status, and WP-CLI (`wp partjoo sync`).
+- Multisite compatible.
 
 == Installation ==
-
-1. افزونه را در پوشه `/wp-content/plugins/` آپلود کنید یا از طریق بخش افزونه‌های وردپرس، آن را نصب کنید.
-2. افزونه را از طریق منوی 'افزونه‌ها' در وردپرس فعال کنید.
-3. به بخش 'ووکامرس > همگام‌سازی پارتجو' بروید و تنظیمات را انجام دهید.
+1. Install and activate WooCommerce.
+2. Upload the plugin ZIP and activate.
+3. Go to WooCommerce → PartJoo Sync: set **Assigned Domain** and other preferences.
+4. Use "Sync CHANGED products" to push data, or rely on cron.
 
 == Frequently Asked Questions ==
+= What is the "Assigned Domain"? =
+The exact domain PartJoo uses to identify your site in the index.
 
-= آیا این افزونه به ووکامرس نیاز دارد؟ =
-
-بله، این افزونه برای کار کردن نیاز به نصب و فعال‌سازی افزونه ووکامرس دارد.
-
-= چگونه می‌توانم دامنه اختصاصی خود را دریافت کنم؟ =
-
-برای دریافت دامنه اختصاصی، باید با تیم فنی پارتجو تماس بگیرید.
+= How are prices handled? =
+If "Convert Toman → Rial" is enabled, prices are multiplied by 10 and unit is set to "rial".
 
 == Changelog ==
+= 1.3.0 =
+* Added deletion handling (tombstones)
+* Added stock/price event hooks
+* Added optional API key support
+* Added cron recurrence setting
+* I18n boilerplate + readme
 
-= 1.0.0 =
-* نسخه اولیه
-
-== Upgrade Notice ==
-
-= 1.0.0 =
-نسخه اولیه افزونه همگام‌سازی محصولات با پارتجو
+= 1.2.0 =
+* Initial public release with change tracking and logs
