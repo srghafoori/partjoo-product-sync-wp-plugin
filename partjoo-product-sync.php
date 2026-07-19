@@ -16,8 +16,15 @@ define('PARTJOO_PLUGIN_FILE', __FILE__);
 define('PARTJOO_PLUGIN_DIR', plugin_dir_path(__FILE__));
 define('PARTJOO_PLUGIN_URL', plugin_dir_url(__FILE__));
 
+require_once PARTJOO_PLUGIN_DIR . 'includes/interfaces/interface-partjoo-transport.php';
+require_once PARTJOO_PLUGIN_DIR . 'includes/interfaces/interface-partjoo-api-client.php';
 require_once PARTJOO_PLUGIN_DIR . 'includes/class-partjoo-state.php';
 require_once PARTJOO_PLUGIN_DIR . 'includes/class-partjoo-product-sync.php';
+require_once PARTJOO_PLUGIN_DIR . 'includes/class-partjoo-config.php';
+require_once PARTJOO_PLUGIN_DIR . 'includes/class-partjoo-wp-http-transport.php';
+require_once PARTJOO_PLUGIN_DIR . 'includes/class-partjoo-api-client.php';
+require_once PARTJOO_PLUGIN_DIR . 'includes/class-partjoo-logger.php';
+require_once PARTJOO_PLUGIN_DIR . 'includes/class-partjoo-container.php';
 require_once PARTJOO_PLUGIN_DIR . 'admin/class-partjoo-admin.php';
 
 // Optional WP-CLI
