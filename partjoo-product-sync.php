@@ -24,6 +24,10 @@ require_once PARTJOO_PLUGIN_DIR . 'includes/class-partjoo-config.php';
 require_once PARTJOO_PLUGIN_DIR . 'includes/class-partjoo-wp-http-transport.php';
 require_once PARTJOO_PLUGIN_DIR . 'includes/class-partjoo-api-client.php';
 require_once PARTJOO_PLUGIN_DIR . 'includes/class-partjoo-logger.php';
+require_once PARTJOO_PLUGIN_DIR . 'includes/class-partjoo-product-repository.php';
+require_once PARTJOO_PLUGIN_DIR . 'includes/class-partjoo-signature-service.php';
+require_once PARTJOO_PLUGIN_DIR . 'includes/class-partjoo-payload-builder.php';
+require_once PARTJOO_PLUGIN_DIR . 'includes/class-partjoo-sync-orchestrator.php';
 require_once PARTJOO_PLUGIN_DIR . 'includes/class-partjoo-container.php';
 require_once PARTJOO_PLUGIN_DIR . 'admin/class-partjoo-admin.php';
 

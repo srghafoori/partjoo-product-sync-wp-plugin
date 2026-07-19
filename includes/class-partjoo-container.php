@@ -9,6 +9,10 @@ class PartJoo_Container {
     const TRANSPORT  = 'transport';
     const API_CLIENT = 'api_client';
     const LOGGER     = 'logger';
+    const PRODUCTS   = 'products';
+    const SIGNATURES = 'signatures';
+    const PAYLOADS   = 'payloads';
+    const SYNC       = 'sync';
 
     private static $instance = null;
     private $services = [];
@@ -40,6 +44,18 @@ class PartJoo_Container {
                 break;
             case self::LOGGER:
                 $instance = new PartJoo_Logger( PartJoo_State::instance() );
+                break;
+            case self::PRODUCTS:
+                $instance = new PartJoo_Product_Repository();
+                break;
+            case self::SIGNATURES:
+                $instance = new PartJoo_Signature_Service();
+                break;
+            case self::PAYLOADS:
+                $instance = new PartJoo_Payload_Builder( $this->get( self::CONFIG ), $this->get( self::PRODUCTS ), $this->get( self::SIGNATURES ) );
+                break;
+            case self::SYNC:
+                $instance = new PartJoo_Sync_Orchestrator( $this->get( self::CONFIG ), $this->get( self::PRODUCTS ), $this->get( self::PAYLOADS ), $this->get( self::SIGNATURES ), $this->get( self::API_CLIENT ), $this->get( self::LOGGER ), PartJoo_State::instance() );
                 break;
             default:
                 throw new InvalidArgumentException( 'Unknown PartJoo service: ' . $service );
