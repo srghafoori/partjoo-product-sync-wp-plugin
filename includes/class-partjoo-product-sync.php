@@ -9,6 +9,8 @@ class PartJoo_Product_Sync {
     const ROUTE            = 'crawler/addProductsToPartjoo';
 
     private $opts = [];
+    private $api_client;
+    private $logger;
 
     public static function instance() {
         if ( self::$instance === null ) self::$instance = new self();
@@ -16,23 +18,14 @@ class PartJoo_Product_Sync {
     }
 
     public static function defaults() {
-        return [
-            'endpoint'             => self::DEFAULT_ENDPOINT,
-            'api_key'              => '',
-            'domain'               => '',
-            'batch_size'           => 100,
-            'send_on_save'         => 1,
-            'send_on_events'       => 1,   // stock/price hooks
-            'convert_toman_rial'   => 1,
-            'force_unit'           => 'rial',
-            'default_condition'    => 'new',
-            'send_variations'      => 0,
-            'cron_recurrence'      => 'hourly', // hourly|twicedaily|daily
-        ];
+        return PartJoo_Config::defaults();
     }
 
     private function __construct() {
-        $this->opts = wp_parse_args(get_option(PartJoo_State::OPTS_KEY, []), self::defaults());
+        $container        = PartJoo_Container::instance();
+        $this->opts       = $container->get( PartJoo_Container::CONFIG )->all();
+        $this->api_client = $container->get( PartJoo_Container::API_CLIENT );
+        $this->logger     = $container->get( PartJoo_Container::LOGGER );
 
         // Keep signatures current on save
         add_action('save_post_product',           [$this, 'on_product_save'], 90, 2);
@@ -200,7 +193,7 @@ class PartJoo_Product_Sync {
                 $is_var = (get_post_type($pid) === 'product_variation');
                 $phash = sha1( wp_json_encode($payload) );
 
-                PartJoo_State::instance()->put_log($pid, $is_var ? 1 : 0, $sig, $phash, $res, $context, 1);
+                $this->logger->log_product_sync($pid, $is_var ? 1 : 0, $sig, $phash, $res, $context, 1);
                 if ( $ok ) {
                     update_post_meta($pid, '_partjoo_sig_sent', $sig);
                 }
@@ -321,27 +314,8 @@ class PartJoo_Product_Sync {
     }
 
     private function send_payload(array $payload, $context='bulk') {
-        $endpoint = esc_url_raw($this->opts['endpoint'] ?: self::DEFAULT_ENDPOINT);
-        $headers = ['Content-Type' => 'application/json; charset=utf-8'];
-        if ( ! empty($this->opts['api_key']) ) {
-            $headers['X-PartJoo-Key'] = $this->opts['api_key'];
-        }
-        $args = [
-            'timeout' => 20,
-            'headers' => $headers,
-            'body'    => wp_json_encode($payload),
-        ];
-        $response = wp_remote_post($endpoint, $args);
-        if ( is_wp_error($response) || wp_remote_retrieve_response_code($response) >= 500 ) {
-            usleep(200000);
-            $response = wp_remote_post($endpoint, $args);
-        }
-        PartJoo_State::instance()->save_last_status([
-            'time'    => current_time('mysql'),
-            'ok'      => $this->is_response_ok($response),
-            'code'    => is_wp_error($response) ? 0 : wp_remote_retrieve_response_code($response),
-            'message' => is_wp_error($response) ? $response->get_error_message() : wp_remote_retrieve_body($response),
-        ]);
+        $response = $this->api_client->send( $payload );
+        $this->logger->save_last_status( $response, $this->is_response_ok( $response ) );
         do_action('partjoo_sync_response', $response, $payload, $context);
         return $response;
     }
