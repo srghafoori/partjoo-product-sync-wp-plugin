@@ -125,8 +125,24 @@ class PartJoo_Product_Sync {
             return;
         }
 
-        $payload = $this->payload_builder->build_deletion_payload( $product, $post_id, $domain );
-        $this->orchestrator->send_payload( $payload, 'delete' );
+        // Enqueue deletion instead of direct API call.
+        $is_variation = 'product_variation' === $type;
+        $priority     = 5; // Higher priority for deletions.
+        $context      = 'delete';
+
+        $queued_id = $this->queue_service->enqueue_product(
+            $post_id,
+            $is_variation,
+            'delete',
+            $priority,
+            $context
+        );
+
+        // Fallback: if queue fails, use synchronous deletion.
+        if ( empty( $queued_id ) && ! $this->queue_service->is_queued( $post_id, 'delete' ) ) {
+            $payload = $this->payload_builder->build_deletion_payload( $product, $post_id, $domain );
+            $this->orchestrator->send_payload( $payload, 'delete' );
+        }
     }
 
     public function maybe_sync_on_save( $post_id, $post ) {
@@ -162,11 +178,64 @@ class PartJoo_Product_Sync {
     }
 
     public function sync_changed_products( $context = 'cron', $force = false ) {
-        return $this->orchestrator->sync_changed_products( $context, $force );
+        // Enqueue all changed products instead of syncing directly.
+        $ids = $this->products->get_syncable_product_ids( ! empty( $this->opts['send_variations'] ) );
+        
+        if ( empty( $ids ) ) {
+            return true;
+        }
+
+        $dirty = [];
+        foreach ( $ids as $product_id ) {
+            if ( $force || $this->products->is_dirty( $product_id ) ) {
+                $dirty[] = $product_id;
+            }
+        }
+
+        if ( empty( $dirty ) ) {
+            return true;
+        }
+
+        // Enqueue in batches.
+        $batch_size = max( 1, min( 100, (int) $this->opts['batch_size'] ) );
+        $chunks     = array_chunk( $dirty, $batch_size );
+        $enqueued   = 0;
+
+        foreach ( $chunks as $chunk ) {
+            $enqueued += $this->queue_service->enqueue_products( $chunk, 'sync', 10, $context );
+        }
+
+        // If queue is disabled or fails completely, fall back to legacy sync.
+        if ( 0 === $enqueued ) {
+            return $this->orchestrator->sync_changed_products( $context, $force );
+        }
+
+        return true;
     }
 
     public function sync_products( array $product_ids, $context = 'bulk', $force = false ) {
-        return $this->orchestrator->sync_products( $product_ids, $context, $force );
+        // Enqueue products instead of syncing directly.
+        $ids = array_values( array_unique( array_filter( $product_ids ) ) );
+        
+        if ( empty( $ids ) ) {
+            return true;
+        }
+
+        // Enqueue in batches.
+        $batch_size = max( 1, min( 100, (int) $this->opts['batch_size'] ) );
+        $chunks     = array_chunk( $ids, $batch_size );
+        $enqueued   = 0;
+
+        foreach ( $chunks as $chunk ) {
+            $enqueued += $this->queue_service->enqueue_products( $chunk, 'sync', 10, $context );
+        }
+
+        // If queue is disabled or fails completely, fall back to legacy sync.
+        if ( 0 === $enqueued ) {
+            return $this->orchestrator->sync_products( $product_ids, $context, $force );
+        }
+
+        return true;
     }
 
     public function build_product_item( int $product_id ) {

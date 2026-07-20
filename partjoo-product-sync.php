@@ -41,6 +41,9 @@ require_once PARTJOO_PLUGIN_DIR . 'includes/queue/interface-partjoo-queue-reposi
 require_once PARTJOO_PLUGIN_DIR . 'includes/queue/class-partjoo-queue-repository.php';
 require_once PARTJOO_PLUGIN_DIR . 'includes/queue/class-partjoo-queue-service.php';
 
+// Queue processor (Version 2.0 Worker)
+require_once PARTJOO_PLUGIN_DIR . 'includes/services/class-partjoo-queue-processor.php';
+
 // Optional WP-CLI
 if ( defined('WP_CLI') && WP_CLI ) {
     require_once PARTJOO_PLUGIN_DIR . 'includes/class-partjoo-cli.php';
