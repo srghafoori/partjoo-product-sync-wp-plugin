@@ -15,6 +15,7 @@ class PartJoo_Product_Sync {
     private $payload_builder;
     private $signatures;
     private $orchestrator;
+    private $queue_service;
 
     public static function instance() {
         if ( self::$instance === null ) {
@@ -35,6 +36,7 @@ class PartJoo_Product_Sync {
         $this->payload_builder = $container->get( PartJoo_Container::PAYLOADS );
         $this->signatures      = $container->get( PartJoo_Container::SIGNATURES );
         $this->orchestrator    = $container->get( PartJoo_Container::SYNC );
+        $this->queue_service   = $container->get( PartJoo_Container::QUEUE_SERVICE );
 
         add_action( 'save_post_product', [ $this, 'on_product_save' ], 90, 2 );
         add_action( 'save_post_product_variation', [ $this, 'on_product_save' ], 90, 2 );
@@ -73,7 +75,23 @@ class PartJoo_Product_Sync {
         update_post_meta( $product_id, '_partjoo_sig_current', $signature );
 
         if ( ! empty( $this->opts['send_on_events'] ) ) {
-            $this->orchestrator->maybe_sync_by_id( $product_id, 'event' );
+            // Enqueue product for sync instead of direct API call.
+            $is_variation = 'product_variation' === $this->products->get_post_type( $product_id );
+            $priority     = 5; // Higher priority for event-driven syncs.
+            $context      = 'event';
+            
+            $queued_id = $this->queue_service->enqueue_product(
+                $product_id,
+                $is_variation,
+                'sync',
+                $priority,
+                $context
+            );
+
+            // Fallback: if queue fails or is disabled, use synchronous sync.
+            if ( empty( $queued_id ) && ! $this->queue_service->is_queued( $product_id, 'sync' ) ) {
+                $this->orchestrator->maybe_sync_by_id( $product_id, 'event' );
+            }
         }
     }
 
@@ -124,7 +142,23 @@ class PartJoo_Product_Sync {
             return;
         }
 
-        $this->orchestrator->maybe_sync_by_id( $post_id, 'single' );
+        // Enqueue product for sync instead of direct API call.
+        $is_variation = 'product_variation' === $this->products->get_post_type( $post_id );
+        $priority     = 10; // Normal priority for save-driven syncs.
+        $context      = 'single';
+
+        $queued_id = $this->queue_service->enqueue_product(
+            $post_id,
+            $is_variation,
+            'sync',
+            $priority,
+            $context
+        );
+
+        // Fallback: if queue fails or is disabled, use synchronous sync.
+        if ( empty( $queued_id ) && ! $this->queue_service->is_queued( $post_id, 'sync' ) ) {
+            $this->orchestrator->maybe_sync_by_id( $post_id, 'single' );
+        }
     }
 
     public function sync_changed_products( $context = 'cron', $force = false ) {
