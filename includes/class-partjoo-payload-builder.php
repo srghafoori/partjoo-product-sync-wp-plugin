@@ -16,11 +16,20 @@ class PartJoo_Payload_Builder {
     }
 
     public function build_payload( $domain, array $product_ids, $force = false ) {
-        $products = [];
+        return $this->build_payload_from_entries( $domain, $this->build_product_entries( $product_ids, $force ) );
+    }
+
+    public function build_product_entries( array $product_ids, $force = false ) {
+        $entries = [];
 
         foreach ( $product_ids as $product_id ) {
             $item = $this->build_product_item( $product_id );
             if ( ! $item ) {
+                $entries[] = [
+                    'product_id' => $product_id,
+                    'item'       => null,
+                ];
+
                 continue;
             }
 
@@ -33,7 +42,22 @@ class PartJoo_Payload_Builder {
                 }
             }
 
-            $products[] = $item;
+            $entries[] = [
+                'product_id' => $product_id,
+                'item'       => $item,
+            ];
+        }
+
+        return $entries;
+    }
+
+    public function build_payload_from_entries( $domain, array $entries ) {
+        $products = [];
+
+        foreach ( $entries as $entry ) {
+            if ( ! empty( $entry['item'] ) ) {
+                $products[] = $entry['item'];
+            }
         }
 
         return [

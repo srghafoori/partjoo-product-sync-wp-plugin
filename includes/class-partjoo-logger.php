@@ -36,4 +36,9 @@ class PartJoo_Logger {
     public function log_product_sync( $product_id, $is_variation, $signature, $payload_hash, $response, $context = 'bulk', $attempt = 1 ) {
         $this->state->put_log( $product_id, $is_variation ? 1 : 0, $signature, $payload_hash, $response, $context, $attempt );
     }
+
+    public function log_validation_error( $product_id, $is_variation, $signature, $payload_hash, $message, $context = 'bulk' ) {
+        $response = new WP_Error( 'partjoo_validation_failed', $message );
+        $this->log_product_sync( $product_id, $is_variation, $signature, $payload_hash, $response, $context, 1 );
+    }
 }

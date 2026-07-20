@@ -13,6 +13,8 @@ class PartJoo_Container {
     const SIGNATURES = 'signatures';
     const PAYLOADS   = 'payloads';
     const SYNC       = 'sync';
+    const PRODUCT_VALIDATOR = 'product_validator';
+    const PAYLOAD_VALIDATOR = 'payload_validator';
 
     private static $instance = null;
     private $services = [];
@@ -55,7 +57,13 @@ class PartJoo_Container {
                 $instance = new PartJoo_Payload_Builder( $this->get( self::CONFIG ), $this->get( self::PRODUCTS ), $this->get( self::SIGNATURES ) );
                 break;
             case self::SYNC:
-                $instance = new PartJoo_Sync_Orchestrator( $this->get( self::CONFIG ), $this->get( self::PRODUCTS ), $this->get( self::PAYLOADS ), $this->get( self::SIGNATURES ), $this->get( self::API_CLIENT ), $this->get( self::LOGGER ), PartJoo_State::instance() );
+                $instance = new PartJoo_Sync_Orchestrator( $this->get( self::CONFIG ), $this->get( self::PRODUCTS ), $this->get( self::PAYLOADS ), $this->get( self::SIGNATURES ), $this->get( self::PAYLOAD_VALIDATOR ), $this->get( self::API_CLIENT ), $this->get( self::LOGGER ), PartJoo_State::instance() );
+                break;
+            case self::PRODUCT_VALIDATOR:
+                $instance = new PartJoo_Product_Validator();
+                break;
+            case self::PAYLOAD_VALIDATOR:
+                $instance = new PartJoo_Payload_Validator( $this->get( self::PRODUCT_VALIDATOR ) );
                 break;
             default:
                 throw new InvalidArgumentException( 'Unknown PartJoo service: ' . $service );

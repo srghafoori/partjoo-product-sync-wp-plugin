@@ -9,15 +9,17 @@ class PartJoo_Sync_Orchestrator {
     private $products;
     private $payload_builder;
     private $signatures;
+    private $payload_validator;
     private $api_client;
     private $logger;
     private $state;
 
-    public function __construct( PartJoo_Config $config, PartJoo_Product_Repository $products, PartJoo_Payload_Builder $payload_builder, PartJoo_Signature_Service $signatures, PartJoo_Api_Client_Interface $api_client, PartJoo_Logger $logger, PartJoo_State $state ) {
+    public function __construct( PartJoo_Config $config, PartJoo_Product_Repository $products, PartJoo_Payload_Builder $payload_builder, PartJoo_Signature_Service $signatures, PartJoo_Payload_Validator $payload_validator, PartJoo_Api_Client_Interface $api_client, PartJoo_Logger $logger, PartJoo_State $state ) {
         $this->config          = $config;
         $this->products        = $products;
         $this->payload_builder = $payload_builder;
         $this->signatures      = $signatures;
+        $this->payload_validator = $payload_validator;
         $this->api_client      = $api_client;
         $this->logger          = $logger;
         $this->state           = $state;
@@ -67,12 +69,28 @@ class PartJoo_Sync_Orchestrator {
         $all_ok     = true;
 
         foreach ( $chunks as $chunk ) {
-            $payload  = $this->payload_builder->build_payload( $domain, $chunk, $force );
-            $response = $this->send_payload( $payload, $context );
+            $entries  = $this->payload_builder->build_product_entries( $chunk, $force );
+            $payload  = $this->payload_builder->build_payload_from_entries( $domain, $entries );
+            $validation = $this->payload_validator->validate( $payload, $entries );
+
+            if ( $validation->has_errors() ) {
+                $this->log_validation_errors( $validation, $payload, $entries, $context );
+                $all_ok = false;
+            }
+
+            $valid_entries = $validation->get_valid_entries();
+            if ( empty( $valid_entries ) ) {
+                usleep( 150000 );
+                continue;
+            }
+
+            $payload  = $this->payload_builder->build_payload_from_entries( $domain, $valid_entries );
+            $response = $this->dispatch_payload( $payload, $context );
             $ok       = $this->is_response_ok( $response );
             $all_ok   = $all_ok && $ok;
 
-            foreach ( $chunk as $product_id ) {
+            foreach ( $valid_entries as $entry ) {
+                $product_id   = $entry['product_id'];
                 $item         = $this->payload_builder->build_product_item( $product_id );
                 $signature    = $this->signatures->make( $item );
                 $is_variation = 'product_variation' === $this->products->get_post_type( $product_id );
@@ -92,12 +110,47 @@ class PartJoo_Sync_Orchestrator {
     }
 
     public function send_payload( array $payload, $context = 'bulk' ) {
+        $entries = [];
+        foreach ( $payload['content']['products'] ?? [] as $index => $product ) {
+            $entries[] = [
+                'product_id' => 0,
+                'item'       => $product,
+            ];
+        }
+
+        $validation = $this->payload_validator->validate( $payload, $entries );
+        if ( $validation->has_errors() ) {
+            $this->log_validation_errors( $validation, $payload, $entries, $context );
+
+            return new WP_Error( 'partjoo_validation_failed', implode( ' ', reset( $validation->get_errors() ) ) );
+        }
+
+        return $this->dispatch_payload( $payload, $context );
+    }
+
+    private function dispatch_payload( array $payload, $context ) {
         $response = $this->api_client->send( $payload );
         $this->logger->save_last_status( $response, $this->is_response_ok( $response ) );
 
         do_action( 'partjoo_sync_response', $response, $payload, $context );
 
         return $response;
+    }
+
+    private function log_validation_errors( PartJoo_Validation_Result $validation, array $payload, array $entries, $context ) {
+        $entry_map    = [];
+        $payload_hash = sha1( wp_json_encode( $payload ) );
+
+        foreach ( $entries as $entry ) {
+            $entry_map[ $entry['product_id'] ] = $entry;
+        }
+
+        foreach ( $validation->get_errors() as $product_id => $messages ) {
+            $entry        = isset( $entry_map[ $product_id ] ) ? $entry_map[ $product_id ] : [ 'item' => null ];
+            $signature    = $this->signatures->make( $entry['item'] );
+            $is_variation = 'product_variation' === $this->products->get_post_type( $product_id );
+            $this->logger->log_validation_error( $product_id, $is_variation, $signature, $payload_hash, implode( ' ', $messages ), $context );
+        }
     }
 
     private function is_response_ok( $response ) {
