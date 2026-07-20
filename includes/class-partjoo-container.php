@@ -15,6 +15,8 @@ class PartJoo_Container {
     const SYNC       = 'sync';
     const PRODUCT_VALIDATOR = 'product_validator';
     const PAYLOAD_VALIDATOR = 'payload_validator';
+    const QUEUE_REPO        = 'queue_repository';
+    const QUEUE_SERVICE     = 'queue_service';
 
     private static $instance = null;
     private $services = [];
@@ -64,6 +66,12 @@ class PartJoo_Container {
                 break;
             case self::PAYLOAD_VALIDATOR:
                 $instance = new PartJoo_Payload_Validator( $this->get( self::PRODUCT_VALIDATOR ) );
+                break;
+            case self::QUEUE_REPO:
+                $instance = new PartJoo_Queue_Repository();
+                break;
+            case self::QUEUE_SERVICE:
+                $instance = new PartJoo_Queue_Service( $this->get( self::QUEUE_REPO ) );
                 break;
             default:
                 throw new InvalidArgumentException( 'Unknown PartJoo service: ' . $service );

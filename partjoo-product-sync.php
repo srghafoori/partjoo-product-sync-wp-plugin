@@ -34,6 +34,13 @@ require_once PARTJOO_PLUGIN_DIR . 'includes/class-partjoo-sync-orchestrator.php'
 require_once PARTJOO_PLUGIN_DIR . 'includes/class-partjoo-container.php';
 require_once PARTJOO_PLUGIN_DIR . 'admin/class-partjoo-admin.php';
 
+// Queue foundation (Version 2.0)
+require_once PARTJOO_PLUGIN_DIR . 'includes/queue/interface-partjoo-queue-item.php';
+require_once PARTJOO_PLUGIN_DIR . 'includes/queue/class-partjoo-queue-item.php';
+require_once PARTJOO_PLUGIN_DIR . 'includes/queue/interface-partjoo-queue-repository.php';
+require_once PARTJOO_PLUGIN_DIR . 'includes/queue/class-partjoo-queue-repository.php';
+require_once PARTJOO_PLUGIN_DIR . 'includes/queue/class-partjoo-queue-service.php';
+
 // Optional WP-CLI
 if ( defined('WP_CLI') && WP_CLI ) {
     require_once PARTJOO_PLUGIN_DIR . 'includes/class-partjoo-cli.php';
