@@ -56,6 +56,24 @@ interface PartJoo_Queue_Repository_Interface {
 	public function mark_failed( $queue_id, $error = '', $retry_count = 0 );
 
 	/**
+	 * Schedule a retry for a failed item.
+	 *
+	 * @param int $queue_id      Queue item ID.
+	 * @param int $retry_count   New retry count.
+	 * @param int $delay_seconds Delay in seconds before next retry.
+	 * @return bool True on success, false on failure.
+	 */
+	public function schedule_retry( $queue_id, $retry_count, $delay_seconds );
+
+	/**
+	 * Get items ready for retry.
+	 *
+	 * @param int $limit Maximum number of items to retrieve.
+	 * @return PartJoo_Queue_Item_Interface[] Array of queue items.
+	 */
+	public function get_due_for_retry( $limit = 100 );
+
+	/**
 	 * Remove an item from the queue.
 	 *
 	 * @param int $queue_id Queue item ID.

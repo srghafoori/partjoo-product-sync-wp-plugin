@@ -75,7 +75,17 @@ add_action('plugins_loaded', function () {
     }
 });
 
-// Cron: sync changed
+// Cron: sync changed - now enqueues jobs instead of direct sync
 add_action('partjoo_cron_sync_changed', function () {
-    PartJoo_Product_Sync::instance()->sync_changed_products();
+    $sync = PartJoo_Product_Sync::instance();
+    $sync->sync_changed_products('cron', false);
+    
+    // Process the queue after enqueueing (within same cron run).
+    $container = PartJoo_Container::instance();
+    $processor = $container->get(PartJoo_Container::QUEUE_PROCESSOR);
+    if ( $processor ) {
+        $batch_size = max( 1, min( 100, (int) ( PartJoo_State::instance()->get_options()['batch_size'] ?? 20 ) ) );
+        $result = $processor->process_queue( $batch_size );
+        PartJoo_Logger::instance()->log( 'Cron queue processed: ' . $result['processed'] . ' succeeded, ' . $result['failed'] . ' failed.', 'info' );
+    }
 });

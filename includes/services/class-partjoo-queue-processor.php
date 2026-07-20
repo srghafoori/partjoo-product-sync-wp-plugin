@@ -70,6 +70,41 @@ class PartJoo_Queue_Processor {
 	private $last_error = '';
 
 	/**
+	 * Maximum retry attempts.
+	 *
+	 * @var int
+	 */
+	const MAX_RETRIES = 5;
+
+	/**
+	 * Base delay for exponential backoff (in seconds).
+	 *
+	 * @var int
+	 */
+	const BASE_DELAY = 60;
+
+	/**
+	 * Maximum delay between retries (in seconds).
+	 *
+	 * @var int
+	 */
+	const MAX_DELAY = 3600;
+
+	/**
+	 * Lock transient key prefix.
+	 *
+	 * @var string
+	 */
+	const LOCK_PREFIX = 'partjoo_queue_processing_lock';
+
+	/**
+	 * Lock timeout in seconds.
+	 *
+	 * @var int
+	 */
+	const LOCK_TIMEOUT = 300;
+
+	/**
 	 * Constructor.
 	 *
 	 * @param PartJoo_Queue_Repository_Interface $repository      Queue repository.
@@ -105,36 +140,113 @@ class PartJoo_Queue_Processor {
 	 * @return array Summary with processed and failed counts.
 	 */
 	public function process_queue( $batch_size = 20 ) {
-		$batch_size = max( 1, min( 100, (int) $batch_size ) );
-
-		$claimed_items = $this->claim_items( $batch_size );
-
-		if ( empty( $claimed_items ) ) {
+		// Prevent concurrent processing using a lock.
+		if ( ! $this->acquire_lock() ) {
+			$this->logger->log( 'Queue processor already running, skipping.', 'warning' );
 			return [
 				'processed' => 0,
 				'failed'    => 0,
 			];
 		}
 
-		$processed = 0;
-		$failed    = 0;
+		try {
+			$batch_size = max( 1, min( 100, (int) $batch_size ) );
 
-		foreach ( $claimed_items as $item ) {
-			$success = $this->process_item( $item );
+			// First, process items due for retry.
+			$retry_items = $this->repository->get_due_for_retry( $batch_size );
+			$retry_count = 0;
+			$retry_failed = 0;
 
-			if ( $success ) {
-				$this->repository->mark_processed( $item->_queue_id, true );
-				$processed++;
-			} else {
-				$this->repository->mark_failed( $item->_queue_id, $this->last_error, 0 );
-				$failed++;
+			foreach ( $retry_items as $item ) {
+				$success = $this->process_item( $item );
+				if ( $success ) {
+					$this->repository->mark_processed( $item->_queue_id, true );
+					$retry_count++;
+				} else {
+					$new_retry = (int) ( $item->_retry_count ?? 0 ) + 1;
+					$this->handle_failure( $item->_queue_id, $new_retry );
+					$retry_failed++;
+				}
 			}
+
+			// Then, process new pending items.
+			$claimed_items = $this->claim_items( $batch_size - count( $retry_items ) );
+			$processed = 0;
+			$failed    = 0;
+
+			foreach ( $claimed_items as $item ) {
+				$success = $this->process_item( $item );
+
+				if ( $success ) {
+					$this->repository->mark_processed( $item->_queue_id, true );
+					$processed++;
+				} else {
+					$this->handle_failure( $item->_queue_id, 1 );
+					$failed++;
+				}
+			}
+
+			return [
+				'processed' => $retry_count + $processed,
+				'failed'    => $retry_failed + $failed,
+			];
+		} finally {
+			$this->release_lock();
+		}
+	}
+
+	/**
+	 * Handle failure with retry logic.
+	 *
+	 * @param int $queue_id    Queue item ID.
+	 * @param int $retry_count Current retry count.
+	 */
+	private function handle_failure( $queue_id, $retry_count ) {
+		if ( $retry_count >= self::MAX_RETRIES ) {
+			// Max retries exceeded, mark as permanently failed.
+			$this->repository->mark_failed( $queue_id, $this->last_error . ' (max retries exceeded)', $retry_count );
+			$this->logger->log( "Queue item {$queue_id} failed permanently after {$retry_count} retries.", 'error' );
+		} else {
+			// Schedule retry with exponential backoff.
+			$delay = $this->calculate_backoff_delay( $retry_count );
+			$this->repository->schedule_retry( $queue_id, $retry_count, $delay );
+			$this->logger->log( "Queue item {$queue_id} scheduled for retry #{$retry_count} in {$delay} seconds.", 'warning' );
+		}
+	}
+
+	/**
+	 * Calculate exponential backoff delay.
+	 *
+	 * @param int $retry_count Current retry count.
+	 * @return int Delay in seconds.
+	 */
+	private function calculate_backoff_delay( $retry_count ) {
+		$delay = self::BASE_DELAY * pow( 2, $retry_count - 1 );
+		return min( $delay, self::MAX_DELAY );
+	}
+
+	/**
+	 * Acquire processing lock.
+	 *
+	 * @return bool True if lock acquired, false otherwise.
+	 */
+	private function acquire_lock() {
+		$lock_key = self::LOCK_PREFIX . '_' . get_current_blog_id();
+		$value    = get_transient( $lock_key );
+
+		if ( false !== $value ) {
+			return false;
 		}
 
-		return [
-			'processed' => $processed,
-			'failed'    => $failed,
-		];
+		return set_transient( $lock_key, time(), self::LOCK_TIMEOUT );
+	}
+
+	/**
+	 * Release processing lock.
+	 */
+	private function release_lock() {
+		$lock_key = self::LOCK_PREFIX . '_' . get_current_blog_id();
+		delete_transient( $lock_key );
 	}
 
 	/**

@@ -57,6 +57,7 @@ class PartJoo_Queue_Repository implements PartJoo_Queue_Repository_Interface {
 			status VARCHAR(16) NOT NULL DEFAULT 'pending',
 			error_message TEXT NULL,
 			retry_count TINYINT UNSIGNED NOT NULL DEFAULT 0,
+			next_retry_at DATETIME NULL,
 			processed_at DATETIME NULL,
 			created_at DATETIME NOT NULL,
 			updated_at DATETIME NOT NULL,
@@ -64,7 +65,8 @@ class PartJoo_Queue_Repository implements PartJoo_Queue_Repository_Interface {
 			KEY status_idx (status),
 			KEY priority_idx (priority, created_at),
 			KEY product_action_idx (product_id, action),
-			KEY created_idx (created_at)
+			KEY created_idx (created_at),
+			KEY retry_idx (status, next_retry_at)
 		) $charset_collate;";
 
 		dbDelta( $sql );
@@ -203,7 +205,7 @@ class PartJoo_Queue_Repository implements PartJoo_Queue_Repository_Interface {
 	}
 
 	/**
-	 * Mark an item as failed.
+	 * Mark an item as failed with retry scheduling.
 	 *
 	 * @param int    $queue_id    Queue item ID.
 	 * @param string $error       Error message.
@@ -228,6 +230,82 @@ class PartJoo_Queue_Repository implements PartJoo_Queue_Repository_Interface {
 		);
 
 		return false !== $result;
+	}
+
+	/**
+	 * Schedule a retry for a failed item.
+	 *
+	 * @param int $queue_id      Queue item ID.
+	 * @param int $retry_count   New retry count.
+	 * @param int $delay_seconds Delay in seconds before next retry.
+	 * @return bool True on success, false on failure.
+	 */
+	public function schedule_retry( $queue_id, $retry_count, $delay_seconds ) {
+		global $wpdb;
+
+		$next_retry = gmdate( 'Y-m-d H:i:s', time() + (int) $delay_seconds );
+
+		$result = $wpdb->update(
+			$this->table,
+			[
+				'status'       => 'pending',
+				'retry_count'  => (int) $retry_count,
+				'error_message'=> null,
+				'updated_at'   => current_time( 'mysql' ),
+				'next_retry_at'=> $next_retry,
+			],
+			[ 'id' => (int) $queue_id ],
+			[ '%s', '%d', '%s', '%s', '%s' ],
+			[ '%d' ]
+		);
+
+		return false !== $result;
+	}
+
+	/**
+	 * Get items ready for retry.
+	 *
+	 * @param int $limit Maximum number of items to retrieve.
+	 * @return PartJoo_Queue_Item_Interface[] Array of queue items.
+	 */
+	public function get_due_for_retry( $limit = 100 ) {
+		global $wpdb;
+
+		$limit = max( 1, min( 1000, (int) $limit ) );
+		$now = current_time( 'mysql' );
+
+		$results = $wpdb->get_results(
+			$wpdb->prepare(
+				"SELECT * FROM {$this->table} WHERE status = 'failed' AND next_retry_at IS NOT NULL AND next_retry_at <= %s ORDER BY priority ASC, created_at ASC LIMIT %d",
+				$now,
+				$limit
+			),
+			ARRAY_A
+		);
+
+		if ( empty( $results ) ) {
+			return [];
+		}
+
+		$items = [];
+		foreach ( $results as $row ) {
+			$data = ! empty( $row['data'] ) ? json_decode( $row['data'], true ) : [];
+			if ( ! is_array( $data ) ) {
+				$data = [];
+			}
+
+			$items[] = new PartJoo_Queue_Item(
+				(int) $row['product_id'],
+				(bool) $row['is_variation'],
+				$row['action'],
+				(int) $row['priority'],
+				$row['context'],
+				$data,
+				$row['created_at']
+			);
+		}
+
+		return $items;
 	}
 
 	/**
