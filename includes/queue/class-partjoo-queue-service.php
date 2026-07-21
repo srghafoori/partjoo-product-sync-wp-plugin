@@ -102,24 +102,33 @@ class PartJoo_Queue_Service {
 	}
 
 	/**
-	 * Get pending queue items.
+	 * Claim pending queue items for processing.
+	 *
+	 * @param int $limit Maximum number of items.
+	 * @return PartJoo_Queue_Item_Interface[] Array of claimed queue items.
+	 */
+	public function claim_pending( $limit = 100 ) {
+		return $this->repository->claim_pending( $limit );
+	}
+
+	/**
+	 * Get items due for retry.
 	 *
 	 * @param int $limit Maximum number of items.
 	 * @return PartJoo_Queue_Item_Interface[] Array of queue items.
 	 */
-	public function get_pending( $limit = 100 ) {
-		return $this->repository->get_pending( $limit );
+	public function get_due_for_retry( $limit = 100 ) {
+		return $this->repository->get_due_for_retry( $limit );
 	}
 
 	/**
-	 * Mark a queue item as processed.
+	 * Mark a queue item as completed.
 	 *
-	 * @param int  $queue_id Queue item ID.
-	 * @param bool $success  Whether processing succeeded.
+	 * @param int $queue_id Queue item ID.
 	 * @return bool True on success.
 	 */
-	public function mark_processed( $queue_id, $success = true ) {
-		return $this->repository->mark_processed( $queue_id, $success );
+	public function mark_completed( $queue_id ) {
+		return $this->repository->mark_completed( $queue_id );
 	}
 
 	/**
@@ -135,6 +144,18 @@ class PartJoo_Queue_Service {
 	}
 
 	/**
+	 * Schedule a retry for a failed item.
+	 *
+	 * @param int $queue_id      Queue item ID.
+	 * @param int $retry_count   Retry count.
+	 * @param int $delay_seconds Delay in seconds.
+	 * @return bool True on success.
+	 */
+	public function schedule_retry( $queue_id, $retry_count, $delay_seconds ) {
+		return $this->repository->schedule_retry( $queue_id, $retry_count, $delay_seconds );
+	}
+
+	/**
 	 * Remove a queue item.
 	 *
 	 * @param int $queue_id Queue item ID.
@@ -145,7 +166,7 @@ class PartJoo_Queue_Service {
 	}
 
 	/**
-	 * Clear old processed items.
+	 * Clear old processed/failed items.
 	 *
 	 * @param int $older_than_days Days threshold.
 	 * @return int Number of items cleared.

@@ -142,7 +142,6 @@ class PartJoo_Queue_Processor {
 	public function process_queue( $batch_size = 20 ) {
 		// Prevent concurrent processing using a lock.
 		if ( ! $this->acquire_lock() ) {
-			$this->logger->log( 'Queue processor already running, skipping.', 'warning' );
 			return [
 				'processed' => 0,
 				'failed'    => 0,
@@ -160,17 +159,17 @@ class PartJoo_Queue_Processor {
 			foreach ( $retry_items as $item ) {
 				$success = $this->process_item( $item );
 				if ( $success ) {
-					$this->repository->mark_processed( $item->_queue_id, true );
+					$this->repository->mark_completed( $item->get_queue_id() );
 					$retry_count++;
 				} else {
-					$new_retry = (int) ( $item->_retry_count ?? 0 ) + 1;
-					$this->handle_failure( $item->_queue_id, $new_retry );
+					$new_retry = $item->get_retry_count() + 1;
+					$this->handle_failure( $item->get_queue_id(), $new_retry );
 					$retry_failed++;
 				}
 			}
 
 			// Then, process new pending items.
-			$claimed_items = $this->claim_items( $batch_size - count( $retry_items ) );
+			$claimed_items = $this->repository->claim_pending( $batch_size - count( $retry_items ) );
 			$processed = 0;
 			$failed    = 0;
 
@@ -178,10 +177,10 @@ class PartJoo_Queue_Processor {
 				$success = $this->process_item( $item );
 
 				if ( $success ) {
-					$this->repository->mark_processed( $item->_queue_id, true );
+					$this->repository->mark_completed( $item->get_queue_id() );
 					$processed++;
 				} else {
-					$this->handle_failure( $item->_queue_id, 1 );
+					$this->handle_failure( $item->get_queue_id(), 1 );
 					$failed++;
 				}
 			}
@@ -205,12 +204,10 @@ class PartJoo_Queue_Processor {
 		if ( $retry_count >= self::MAX_RETRIES ) {
 			// Max retries exceeded, mark as permanently failed.
 			$this->repository->mark_failed( $queue_id, $this->last_error . ' (max retries exceeded)', $retry_count );
-			$this->logger->log( "Queue item {$queue_id} failed permanently after {$retry_count} retries.", 'error' );
 		} else {
 			// Schedule retry with exponential backoff.
 			$delay = $this->calculate_backoff_delay( $retry_count );
 			$this->repository->schedule_retry( $queue_id, $retry_count, $delay );
-			$this->logger->log( "Queue item {$queue_id} scheduled for retry #{$retry_count} in {$delay} seconds.", 'warning' );
 		}
 	}
 
@@ -250,88 +247,12 @@ class PartJoo_Queue_Processor {
 	}
 
 	/**
-	 * Claim pending items for processing.
-	 *
-	 * @param int $limit Number of items to claim.
-	 * @return PartJoo_Queue_Item[] Array of claimed queue items.
-	 */
-	private function claim_items( $limit ) {
-		global $wpdb;
-
-		$table = $this->repository->get_table_name();
-		$limit = (int) $limit;
-
-		// Atomically claim items by updating their status to 'processing'.
-		// We use a subquery to select IDs first, then update them.
-		$ids = $wpdb->get_col(
-			$wpdb->prepare(
-				"SELECT id FROM {$table} WHERE status = 'pending' ORDER BY priority ASC, created_at ASC LIMIT %d",
-				$limit
-			)
-		);
-
-		if ( empty( $ids ) ) {
-			return [];
-		}
-
-		$placeholders = implode( ',', array_fill( 0, count( $ids ), '%d' ) );
-		$now = current_time( 'mysql' );
-
-		// Update status to processing atomically.
-		$wpdb->query(
-			$wpdb->prepare(
-				"UPDATE {$table} SET status = 'processing', updated_at = %s WHERE id IN ($placeholders)",
-				$now,
-				...$ids
-			)
-		);
-
-		// Fetch the claimed items with full data.
-		$results = $wpdb->get_results(
-			$wpdb->prepare(
-				"SELECT * FROM {$table} WHERE id IN ($placeholders) ORDER BY priority ASC, created_at ASC",
-				...$ids
-			),
-			ARRAY_A
-		);
-
-		if ( empty( $results ) ) {
-			return [];
-		}
-
-		$items = [];
-		foreach ( $results as $row ) {
-			$data = ! empty( $row['data'] ) ? json_decode( $row['data'], true ) : [];
-			if ( ! is_array( $data ) ) {
-				$data = [];
-			}
-
-			$item = new PartJoo_Queue_Item(
-				(int) $row['product_id'],
-				(bool) $row['is_variation'],
-				$row['action'],
-				(int) $row['priority'],
-				$row['context'],
-				$data,
-				$row['created_at']
-			);
-
-			// Store the queue ID on the item for later reference.
-			$item->_queue_id = (int) $row['id'];
-
-			$items[] = $item;
-		}
-
-		return $items;
-	}
-
-	/**
 	 * Process a single queue item.
 	 *
-	 * @param PartJoo_Queue_Item $item Queue item.
+	 * @param PartJoo_Queue_Item_Interface $item Queue item.
 	 * @return bool True on success, false on failure.
 	 */
-	private function process_item( PartJoo_Queue_Item $item ) {
+	private function process_item( PartJoo_Queue_Item_Interface $item ) {
 		$this->last_error = '';
 
 		$product_id = $item->get_product_id();
@@ -347,10 +268,10 @@ class PartJoo_Queue_Processor {
 	/**
 	 * Process a product upsert (create/update).
 	 *
-	 * @param PartJoo_Queue_Item $item Queue item.
+	 * @param PartJoo_Queue_Item_Interface $item Queue item.
 	 * @return bool True on success, false on failure.
 	 */
-	private function process_upsert( PartJoo_Queue_Item $item ) {
+	private function process_upsert( PartJoo_Queue_Item_Interface $item ) {
 		$product_id = $item->get_product_id();
 
 		// Verify product still exists and is published.
@@ -405,10 +326,10 @@ class PartJoo_Queue_Processor {
 	/**
 	 * Process a product deletion (tombstone).
 	 *
-	 * @param PartJoo_Queue_Item $item Queue item.
+	 * @param PartJoo_Queue_Item_Interface $item Queue item.
 	 * @return bool True on success, false on failure.
 	 */
-	private function process_deletion( PartJoo_Queue_Item $item ) {
+	private function process_deletion( PartJoo_Queue_Item_Interface $item ) {
 		$product_id = $item->get_product_id();
 
 		$domain = trim( (string) $this->config->get( 'domain' ) );

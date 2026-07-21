@@ -136,19 +136,64 @@ class PartJoo_Queue_Repository implements PartJoo_Queue_Repository_Interface {
 	}
 
 	/**
-	 * Get pending items from the queue.
+	 * Claim pending items atomically for processing.
+	 *
+	 * @param int $limit Maximum number of items to claim.
+	 * @return PartJoo_Queue_Item_Interface[] Array of claimed queue items.
+	 */
+	public function claim_pending( $limit = 100 ) {
+		global $wpdb;
+
+		$limit = max( 1, min( 1000, (int) $limit ) );
+		$now   = current_time( 'mysql' );
+
+		// Atomically claim items by updating status from 'pending' to 'processing'.
+		// Use UPDATE with LIMIT to prevent race conditions.
+		$rows_affected = $wpdb->query(
+			$wpdb->prepare(
+				"UPDATE {$this->table} SET status = 'processing', updated_at = %s WHERE status = 'pending' AND (next_retry_at IS NULL OR next_retry_at <= %s) ORDER BY priority ASC, created_at ASC LIMIT %d",
+				$now,
+				$now,
+				$limit
+			)
+		);
+
+		if ( 0 === $rows_affected ) {
+			return [];
+		}
+
+		// Fetch the claimed items.
+		$results = $wpdb->get_results(
+			$wpdb->prepare(
+				"SELECT * FROM {$this->table} WHERE status = 'processing' AND updated_at = %s ORDER BY priority ASC, created_at ASC",
+				$now
+			),
+			ARRAY_A
+		);
+
+		if ( empty( $results ) ) {
+			return [];
+		}
+
+		return $this->build_items_from_rows( $results );
+	}
+
+	/**
+	 * Get items due for retry.
 	 *
 	 * @param int $limit Maximum number of items to retrieve.
 	 * @return PartJoo_Queue_Item_Interface[] Array of queue items.
 	 */
-	public function get_pending( $limit = 100 ) {
+	public function get_due_for_retry( $limit = 100 ) {
 		global $wpdb;
 
 		$limit = max( 1, min( 1000, (int) $limit ) );
+		$now   = current_time( 'mysql' );
 
 		$results = $wpdb->get_results(
 			$wpdb->prepare(
-				"SELECT * FROM {$this->table} WHERE status = 'pending' ORDER BY priority ASC, created_at ASC LIMIT %d",
+				"SELECT * FROM {$this->table} WHERE status = 'failed' AND next_retry_at IS NOT NULL AND next_retry_at <= %s ORDER BY priority ASC, created_at ASC LIMIT %d",
+				$now,
 				$limit
 			),
 			ARRAY_A
@@ -158,41 +203,22 @@ class PartJoo_Queue_Repository implements PartJoo_Queue_Repository_Interface {
 			return [];
 		}
 
-		$items = [];
-		foreach ( $results as $row ) {
-			$data = ! empty( $row['data'] ) ? json_decode( $row['data'], true ) : [];
-			if ( ! is_array( $data ) ) {
-				$data = [];
-			}
-
-			$items[] = new PartJoo_Queue_Item(
-				(int) $row['product_id'],
-				(bool) $row['is_variation'],
-				$row['action'],
-				(int) $row['priority'],
-				$row['context'],
-				$data,
-				$row['created_at']
-			);
-		}
-
-		return $items;
+		return $this->build_items_from_rows( $results );
 	}
 
 	/**
-	 * Mark an item as processed.
+	 * Mark an item as completed.
 	 *
-	 * @param int  $queue_id Queue item ID.
-	 * @param bool $success  Whether processing was successful.
+	 * @param int $queue_id Queue item ID.
 	 * @return bool True on success, false on failure.
 	 */
-	public function mark_processed( $queue_id, $success = true ) {
+	public function mark_completed( $queue_id ) {
 		global $wpdb;
 
 		$result = $wpdb->update(
 			$this->table,
 			[
-				'status'       => $success ? 'processed' : 'failed',
+				'status'       => 'completed',
 				'processed_at' => current_time( 'mysql' ),
 				'updated_at'   => current_time( 'mysql' ),
 			],
@@ -205,7 +231,7 @@ class PartJoo_Queue_Repository implements PartJoo_Queue_Repository_Interface {
 	}
 
 	/**
-	 * Mark an item as failed with retry scheduling.
+	 * Mark an item as failed.
 	 *
 	 * @param int    $queue_id    Queue item ID.
 	 * @param string $error       Error message.
@@ -263,52 +289,6 @@ class PartJoo_Queue_Repository implements PartJoo_Queue_Repository_Interface {
 	}
 
 	/**
-	 * Get items ready for retry.
-	 *
-	 * @param int $limit Maximum number of items to retrieve.
-	 * @return PartJoo_Queue_Item_Interface[] Array of queue items.
-	 */
-	public function get_due_for_retry( $limit = 100 ) {
-		global $wpdb;
-
-		$limit = max( 1, min( 1000, (int) $limit ) );
-		$now = current_time( 'mysql' );
-
-		$results = $wpdb->get_results(
-			$wpdb->prepare(
-				"SELECT * FROM {$this->table} WHERE status = 'failed' AND next_retry_at IS NOT NULL AND next_retry_at <= %s ORDER BY priority ASC, created_at ASC LIMIT %d",
-				$now,
-				$limit
-			),
-			ARRAY_A
-		);
-
-		if ( empty( $results ) ) {
-			return [];
-		}
-
-		$items = [];
-		foreach ( $results as $row ) {
-			$data = ! empty( $row['data'] ) ? json_decode( $row['data'], true ) : [];
-			if ( ! is_array( $data ) ) {
-				$data = [];
-			}
-
-			$items[] = new PartJoo_Queue_Item(
-				(int) $row['product_id'],
-				(bool) $row['is_variation'],
-				$row['action'],
-				(int) $row['priority'],
-				$row['context'],
-				$data,
-				$row['created_at']
-			);
-		}
-
-		return $items;
-	}
-
-	/**
 	 * Remove an item from the queue.
 	 *
 	 * @param int $queue_id Queue item ID.
@@ -327,7 +307,7 @@ class PartJoo_Queue_Repository implements PartJoo_Queue_Repository_Interface {
 	}
 
 	/**
-	 * Clear old processed items.
+	 * Clear old processed/failed items.
 	 *
 	 * @param int $older_than_days Days threshold.
 	 * @return int Number of rows removed.
@@ -340,7 +320,7 @@ class PartJoo_Queue_Repository implements PartJoo_Queue_Repository_Interface {
 
 		$result = $wpdb->query(
 			$wpdb->prepare(
-				"DELETE FROM {$this->table} WHERE status IN ('processed', 'failed') AND processed_at < %s",
+				"DELETE FROM {$this->table} WHERE status IN ('completed', 'failed') AND processed_at < %s",
 				$cutoff
 			)
 		);
@@ -360,7 +340,8 @@ class PartJoo_Queue_Repository implements PartJoo_Queue_Repository_Interface {
 			"SELECT 
 				COUNT(*) as total,
 				SUM(CASE WHEN status = 'pending' THEN 1 ELSE 0 END) as pending,
-				SUM(CASE WHEN status = 'processed' THEN 1 ELSE 0 END) as processed,
+				SUM(CASE WHEN status = 'processing' THEN 1 ELSE 0 END) as processing,
+				SUM(CASE WHEN status = 'completed' THEN 1 ELSE 0 END) as completed,
 				SUM(CASE WHEN status = 'failed' THEN 1 ELSE 0 END) as failed
 			FROM {$this->table}",
 			ARRAY_A
@@ -368,18 +349,20 @@ class PartJoo_Queue_Repository implements PartJoo_Queue_Repository_Interface {
 
 		if ( empty( $results ) ) {
 			return [
-				'total'     => 0,
-				'pending'   => 0,
-				'processed' => 0,
-				'failed'    => 0,
+				'total'      => 0,
+				'pending'    => 0,
+				'processing' => 0,
+				'completed'  => 0,
+				'failed'     => 0,
 			];
 		}
 
 		return [
-			'total'     => (int) $results['total'],
-			'pending'   => (int) $results['pending'],
-			'processed' => (int) $results['processed'],
-			'failed'    => (int) $results['failed'],
+			'total'      => (int) $results['total'],
+			'pending'    => (int) $results['pending'],
+			'processing' => (int) $results['processing'],
+			'completed'  => (int) $results['completed'],
+			'failed'     => (int) $results['failed'],
 		];
 	}
 
@@ -402,5 +385,36 @@ class PartJoo_Queue_Repository implements PartJoo_Queue_Repository_Interface {
 		);
 
 		return (bool) $result;
+	}
+
+	/**
+	 * Build QueueItem objects from database rows.
+	 *
+	 * @param array $rows Database rows.
+	 * @return PartJoo_Queue_Item_Interface[]
+	 */
+	private function build_items_from_rows( array $rows ) {
+		$items = [];
+		foreach ( $rows as $row ) {
+			$data = ! empty( $row['data'] ) ? json_decode( $row['data'], true ) : [];
+			if ( ! is_array( $data ) ) {
+				$data = [];
+			}
+
+			$items[] = new PartJoo_Queue_Item(
+				(int) $row['product_id'],
+				(bool) $row['is_variation'],
+				$row['action'],
+				(int) $row['priority'],
+				$row['context'],
+				$data,
+				$row['created_at'],
+				(int) $row['id'],
+				(int) $row['retry_count'],
+				$row['next_retry_at']
+			);
+		}
+
+		return $items;
 	}
 }

@@ -29,27 +29,34 @@ interface PartJoo_Queue_Repository_Interface {
 	public function enqueue_multiple( array $items );
 
 	/**
-	 * Get pending items from the queue.
+	 * Claim pending items atomically for processing.
+	 *
+	 * @param int $limit Maximum number of items to claim.
+	 * @return PartJoo_Queue_Item_Interface[] Array of claimed queue items with status set to 'processing'.
+	 */
+	public function claim_pending( $limit = 100 );
+
+	/**
+	 * Get items due for retry.
 	 *
 	 * @param int $limit Maximum number of items to retrieve.
 	 * @return PartJoo_Queue_Item_Interface[] Array of queue items.
 	 */
-	public function get_pending( $limit = 100 );
+	public function get_due_for_retry( $limit = 100 );
 
 	/**
-	 * Mark an item as processed.
+	 * Mark an item as completed.
 	 *
 	 * @param int $queue_id Queue item ID.
-	 * @param bool $success Whether processing was successful.
 	 * @return bool True on success, false on failure.
 	 */
-	public function mark_processed( $queue_id, $success = true );
+	public function mark_completed( $queue_id );
 
 	/**
 	 * Mark an item as failed.
 	 *
-	 * @param int    $queue_id Queue item ID.
-	 * @param string $error    Error message.
+	 * @param int    $queue_id    Queue item ID.
+	 * @param string $error       Error message.
 	 * @param int    $retry_count Number of retries attempted.
 	 * @return bool True on success, false on failure.
 	 */
@@ -66,14 +73,6 @@ interface PartJoo_Queue_Repository_Interface {
 	public function schedule_retry( $queue_id, $retry_count, $delay_seconds );
 
 	/**
-	 * Get items ready for retry.
-	 *
-	 * @param int $limit Maximum number of items to retrieve.
-	 * @return PartJoo_Queue_Item_Interface[] Array of queue items.
-	 */
-	public function get_due_for_retry( $limit = 100 );
-
-	/**
 	 * Remove an item from the queue.
 	 *
 	 * @param int $queue_id Queue item ID.
@@ -82,7 +81,7 @@ interface PartJoo_Queue_Repository_Interface {
 	public function remove( $queue_id );
 
 	/**
-	 * Clear old processed items.
+	 * Clear old processed/failed items.
 	 *
 	 * @param int $older_than_days Days threshold.
 	 * @return int Number of rows removed.

@@ -13,6 +13,13 @@ if ( ! defined( 'ABSPATH' ) ) {
 
 interface PartJoo_Queue_Item_Interface {
 	/**
+	 * Get the queue ID.
+	 *
+	 * @return int Queue ID.
+	 */
+	public function get_queue_id();
+
+	/**
 	 * Get the product ID.
 	 *
 	 * @return int Product ID.
@@ -60,4 +67,18 @@ interface PartJoo_Queue_Item_Interface {
 	 * @return string MySQL datetime string.
 	 */
 	public function get_created_at();
+
+	/**
+	 * Get the retry count.
+	 *
+	 * @return int Retry count.
+	 */
+	public function get_retry_count();
+
+	/**
+	 * Get the next retry timestamp.
+	 *
+	 * @return string|null MySQL datetime string or null.
+	 */
+	public function get_next_retry_at();
 }
