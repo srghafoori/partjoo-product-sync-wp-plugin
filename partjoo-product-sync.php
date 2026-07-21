@@ -34,6 +34,16 @@ require_once PARTJOO_PLUGIN_DIR . 'includes/class-partjoo-sync-orchestrator.php'
 require_once PARTJOO_PLUGIN_DIR . 'includes/class-partjoo-container.php';
 require_once PARTJOO_PLUGIN_DIR . 'admin/class-partjoo-admin.php';
 
+// Queue foundation (Version 2.0)
+require_once PARTJOO_PLUGIN_DIR . 'includes/queue/interface-partjoo-queue-item.php';
+require_once PARTJOO_PLUGIN_DIR . 'includes/queue/class-partjoo-queue-item.php';
+require_once PARTJOO_PLUGIN_DIR . 'includes/queue/interface-partjoo-queue-repository.php';
+require_once PARTJOO_PLUGIN_DIR . 'includes/queue/class-partjoo-queue-repository.php';
+require_once PARTJOO_PLUGIN_DIR . 'includes/queue/class-partjoo-queue-service.php';
+
+// Queue processor (Version 2.0 Worker)
+require_once PARTJOO_PLUGIN_DIR . 'includes/services/class-partjoo-queue-processor.php';
+
 // Optional WP-CLI
 if ( defined('WP_CLI') && WP_CLI ) {
     require_once PARTJOO_PLUGIN_DIR . 'includes/class-partjoo-cli.php';
@@ -65,7 +75,18 @@ add_action('plugins_loaded', function () {
     }
 });
 
-// Cron: sync changed
+// Cron: sync changed - now enqueues jobs instead of direct sync
 add_action('partjoo_cron_sync_changed', function () {
-    PartJoo_Product_Sync::instance()->sync_changed_products();
+    $sync = PartJoo_Product_Sync::instance();
+    $sync->sync_changed_products('cron', false);
+    
+    // Process the queue after enqueueing (within same cron run).
+    $container = PartJoo_Container::instance();
+    $processor = $container->get(PartJoo_Container::QUEUE_PROCESSOR);
+    if ( $processor ) {
+        $batch_size = max( 1, min( 100, (int) ( PartJoo_State::instance()->get_options()['batch_size'] ?? 20 ) ) );
+        $result = $processor->process_queue( $batch_size );
+        $logger = $container->get(PartJoo_Container::LOGGER);
+        $logger->log_product_sync( 0, false, '', '', [], 'queue_status', 1 );
+    }
 });

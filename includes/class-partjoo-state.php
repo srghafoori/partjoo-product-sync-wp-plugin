@@ -42,6 +42,10 @@ class PartJoo_State {
         ) $charset;";
         dbDelta($sql);
         update_option(self::DB_VERSION_OPT, self::DB_VERSION);
+
+        // Install queue table for Version 2.0
+        $queue_repo = new PartJoo_Queue_Repository();
+        $queue_repo->install();
     }
 
     public function table() { return $this->table; }
