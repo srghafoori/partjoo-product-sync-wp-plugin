@@ -1,27 +1,50 @@
-```
-# Compiled and build artifacts
-*.pyc
-__pycache__/
-
 # Dependencies
 vendor/
 node_modules/
-composer.lock
 
-# Logs and temp files
+# Logs
 *.log
-*.tmp
+wp-content/debug.log
 
-# Environment
+# Environment specific settings
 .env
 .env.local
-*.env.*
+.env.production
 
-# Editors
+# WordPress files
+wp-config.php
+.htaccess
+
+# Cache and temporary files
+cache/
+tmp/
+*.tmp
+*.temp
+*.diff
+
+# OS generated files
+.DS_Store
+Thumbs.db
+ehthumbs.db
+Icon?
+.directory
+*.nib
+*~
+.\#*
+
+# IDE specific files
 .vscode/
 .idea/
+*.swp
+*.swo
 
-# WordPress specific
+# Backup files
+*.bak
+*.backup
+*.old
+
+# Sensitive data
+wp-content/uploads/private/
 wp-content/cache/
-*.sql
-```
+*.key
+*.cert

@@ -86,7 +86,6 @@ add_action('partjoo_cron_sync_changed', function () {
     if ( $processor ) {
         $batch_size = max( 1, min( 100, (int) ( PartJoo_State::instance()->get_options()['batch_size'] ?? 20 ) ) );
         $result = $processor->process_queue( $batch_size );
-        $logger = $container->get(PartJoo_Container::LOGGER);
-        $logger->log_product_sync( 0, false, '', '', [], 'queue_status', 1 );
+        // Removed fake product log entry that was using product_id = 0
     }
 });

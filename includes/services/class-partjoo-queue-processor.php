@@ -168,8 +168,15 @@ class PartJoo_Queue_Processor {
 				}
 			}
 
-			// Then, process new pending items.
-			$claimed_items = $this->repository->claim_pending( $batch_size - count( $retry_items ) );
+			// Calculate remaining capacity after processing retries
+			$remaining_capacity = max(0, $batch_size - count( $retry_items ));
+			
+			// Then, process new pending items only if there's capacity left
+			$claimed_items = [];
+			if ($remaining_capacity > 0) {
+				$claimed_items = $this->repository->claim_pending( $remaining_capacity );
+			}
+			
 			$processed = 0;
 			$failed    = 0;
 
@@ -287,7 +294,7 @@ class PartJoo_Queue_Processor {
 		}
 
 		// Build the product entry.
-		$entries = $this->payload_builder->build_product_entries( [ $product_id ], false );
+		$entries = $this->payload_builder->build_product_entries( [ $product_id ], $item->is_variation() );
 
 		if ( empty( $entries ) ) {
 			$this->last_error = 'Failed to build product entry';
@@ -311,7 +318,6 @@ class PartJoo_Queue_Processor {
 		}
 
 		// Update signatures and log success.
-		$entry      = reset( $entries );
 		$item_data  = $this->payload_builder->build_product_item( $product_id );
 		$signature  = $this->signatures->make( $item_data );
 		$is_variation = $item->is_variation();
@@ -366,5 +372,4 @@ class PartJoo_Queue_Processor {
 		$this->logger->log_product_sync( $product_id, $is_variation, $signature, $payload_hash, $response, 'queue_delete', 1 );
 
 		return true;
-	}
-}
+</original_code>```
