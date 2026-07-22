@@ -21,6 +21,10 @@ class PartJoo_Product_Repository {
         return get_post_meta( $product_id, $key, true );
     }
 
+    public function update_meta( $product_id, $key, $value ) {
+        return update_post_meta( $product_id, $key, $value );
+    }
+
     public function get_syncable_product_ids( $include_variations ) {
         $ids = get_posts( [
             'post_type'      => [ 'product' ],
@@ -70,5 +74,13 @@ class PartJoo_Product_Repository {
             if ( ! $sig_current || $sig_current !== $sig_sent ) $dirty++;
         }
         return $dirty;
+    }
+    
+    public function update_signature_sent( $product_id, $signature ) {
+        $this->update_meta( $product_id, '_partjoo_sig_sent', $signature );
+    }
+    
+    public function update_signature_current( $product_id, $signature ) {
+        $this->update_meta( $product_id, '_partjoo_sig_current', $signature );
     }
 }

@@ -324,7 +324,7 @@ class PartJoo_Queue_Processor {
 		$payload_hash = sha1( wp_json_encode( $payload ) );
 
 		$this->logger->log_product_sync( $product_id, $is_variation, $signature, $payload_hash, $response, 'queue', 1 );
-		update_post_meta( $product_id, '_partjoo_sig_sent', $signature );
+		$this->products->update_signature_sent( $product_id, $signature );
 
 		return true;
 	}
@@ -372,4 +372,4 @@ class PartJoo_Queue_Processor {
 		$this->logger->log_product_sync( $product_id, $is_variation, $signature, $payload_hash, $response, 'queue_delete', 1 );
 
 		return true;
-</original_code>```
+}

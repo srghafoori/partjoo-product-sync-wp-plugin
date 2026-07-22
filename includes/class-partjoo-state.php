@@ -5,7 +5,6 @@ class PartJoo_State {
     private static $instance = null;
     private $table;
     const OPTS_KEY = 'partjoo_settings';
-    const LAST_STATUS_OPT = 'partjoo_last_sync_status';
     const DB_VERSION_OPT = 'partjoo_db_version';
     const DB_VERSION = '1.0';
 

@@ -13,7 +13,7 @@ class PartJoo_Sync_Orchestrator {
     private $api_client;
     private $logger;
 
-    public function __construct( PartJoo_Config $config, PartJoo_Product_Repository $products, PartJoo_Payload_Builder $payload_builder, PartJoo_Signature_Service $signatures, PartJoo_Payload_Validator $payload_validator, PartJoo_Api_Client_Interface $api_client, PartJoo_Logger $logger, PartJoo_State $state ) {
+    public function __construct( PartJoo_Config $config, PartJoo_Product_Repository $products, PartJoo_Payload_Builder $payload_builder, PartJoo_Signature_Service $signatures, PartJoo_Payload_Validator $payload_validator, PartJoo_Api_Client_Interface $api_client, PartJoo_Logger $logger ) {
         $this->config          = $config;
         $this->products        = $products;
         $this->payload_builder = $payload_builder;
@@ -97,7 +97,7 @@ class PartJoo_Sync_Orchestrator {
                 $this->logger->log_product_sync( $product_id, $is_variation, $signature, $payload_hash, $response, $context, 1 );
 
                 if ( $ok ) {
-                    update_post_meta( $product_id, '_partjoo_sig_sent', $signature );
+                    $this->products->update_signature_sent( $product_id, $signature );
                 }
             }
 

@@ -62,7 +62,7 @@ class PartJoo_Product_Sync {
 
         $item      = $this->build_product_item( $post_id );
         $signature = $this->signatures->make( $item );
-        update_post_meta( $post_id, '_partjoo_sig_current', $signature );
+        $this->products->update_signature_current( $post_id, $signature );
     }
 
     public function on_wc_update_product( $product_id ) {
@@ -72,7 +72,7 @@ class PartJoo_Product_Sync {
 
         $item      = $this->build_product_item( $product_id );
         $signature = $this->signatures->make( $item );
-        update_post_meta( $product_id, '_partjoo_sig_current', $signature );
+        $this->products->update_signature_current( $product_id, $signature );
 
         if ( ! empty( $this->opts['send_on_events'] ) ) {
             // Enqueue product for sync instead of direct API call.
