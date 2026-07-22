@@ -55,4 +55,20 @@ class PartJoo_Product_Repository {
 
         return ! $signature_current || $signature_current !== $signature_sent;
     }
+    
+    public function count_dirty_products() {
+        $q = new WP_Query([
+            'post_type'      => ['product','product_variation'],
+            'post_status'    => ['publish'],
+            'posts_per_page' => -1,
+            'fields'         => 'ids',
+        ]);
+        $dirty = 0;
+        foreach ( $q->posts as $pid ) {
+            $sig_current = get_post_meta($pid, '_partjoo_sig_current', true);
+            $sig_sent    = get_post_meta($pid, '_partjoo_sig_sent', true);
+            if ( ! $sig_current || $sig_current !== $sig_sent ) $dirty++;
+        }
+        return $dirty;
+    }
 }

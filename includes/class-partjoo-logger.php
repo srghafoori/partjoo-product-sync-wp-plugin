@@ -6,22 +6,36 @@ if ( ! defined( 'ABSPATH' ) ) {
 class PartJoo_Logger {
 
     private $state;
+    const LAST_STATUS_OPT = 'partjoo_last_sync_status';
 
     public function __construct( PartJoo_State $state ) {
         $this->state = $state;
     }
 
     /**
-     * @param array|WP_Error $response HTTP response.
-     * @param bool           $ok       Whether the response was successful.
+     * Save last sync status directly from an array
      */
-    public function save_last_status( $response, $ok ) {
-        $this->state->save_last_status( [
+    public function save_last_status(array $status) {
+        update_option(self::LAST_STATUS_OPT, $status, false);
+    }
+    
+    /**
+     * Record HTTP response status
+     */
+    public function record_http_status($response, bool $ok) {
+        update_option(self::LAST_STATUS_OPT, [
             'time'    => current_time( 'mysql' ),
             'ok'      => $ok,
             'code'    => is_wp_error( $response ) ? 0 : wp_remote_retrieve_response_code( $response ),
             'message' => is_wp_error( $response ) ? $response->get_error_message() : wp_remote_retrieve_body( $response ),
-        ] );
+        ], false);
+    }
+    
+    /**
+     * Get last sync status using the option key
+     */
+    public function get_last_status() {
+        return get_option(self::LAST_STATUS_OPT);
     }
 
     /**

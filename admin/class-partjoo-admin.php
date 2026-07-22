@@ -102,8 +102,12 @@ class PartJoo_Admin {
     }
 
     public function render_settings_page() {
-        $status = PartJoo_State::instance()->get_last_status();
-        $dirty  = PartJoo_State::instance()->count_dirty_products();
+        $container = PartJoo_Container::instance();
+        $logger = $container->get(PartJoo_Container::LOGGER);
+        $products = $container->get(PartJoo_Container::PRODUCT_REPOSITORY);
+        
+        $status = $logger->get_last_status();
+        $dirty  = $products->count_dirty_products();
         $logs   = PartJoo_State::instance()->get_recent_logs(20);
         $opts   = get_option(PartJoo_State::OPTS_KEY, []);
         ?>

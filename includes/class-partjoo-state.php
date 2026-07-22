@@ -50,13 +50,6 @@ class PartJoo_State {
 
     public function table() { return $this->table; }
 
-    public function save_last_status(array $arr) {
-        update_option(self::LAST_STATUS_OPT, $arr, false);
-    }
-    public function get_last_status() {
-        return get_option(self::LAST_STATUS_OPT);
-    }
-
     public function get_options() {
         return wp_parse_args( get_option(self::OPTS_KEY, []), PartJoo_Product_Sync::defaults() );
     }
@@ -92,19 +85,4 @@ class PartJoo_State {
         return $wpdb->get_results("SELECT * FROM {$this->table} ORDER BY id DESC LIMIT {$limit}", ARRAY_A);
     }
 
-    public function count_dirty_products() {
-        $q = new WP_Query([
-            'post_type'      => ['product','product_variation'],
-            'post_status'    => ['publish'],
-            'posts_per_page' => -1,
-            'fields'         => 'ids',
-        ]);
-        $dirty = 0;
-        foreach ( $q->posts as $pid ) {
-            $sig_current = get_post_meta($pid, '_partjoo_sig_current', true);
-            $sig_sent    = get_post_meta($pid, '_partjoo_sig_sent', true);
-            if ( ! $sig_current || $sig_current !== $sig_sent ) $dirty++;
-        }
-        return $dirty;
-    }
 }

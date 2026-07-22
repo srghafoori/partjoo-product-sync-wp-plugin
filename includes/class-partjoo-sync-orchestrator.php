@@ -12,7 +12,6 @@ class PartJoo_Sync_Orchestrator {
     private $payload_validator;
     private $api_client;
     private $logger;
-    private $state;
 
     public function __construct( PartJoo_Config $config, PartJoo_Product_Repository $products, PartJoo_Payload_Builder $payload_builder, PartJoo_Signature_Service $signatures, PartJoo_Payload_Validator $payload_validator, PartJoo_Api_Client_Interface $api_client, PartJoo_Logger $logger, PartJoo_State $state ) {
         $this->config          = $config;
@@ -22,7 +21,6 @@ class PartJoo_Sync_Orchestrator {
         $this->payload_validator = $payload_validator;
         $this->api_client      = $api_client;
         $this->logger          = $logger;
-        $this->state           = $state;
     }
 
     public function maybe_sync_by_id( $product_id, $context = 'single' ) {
@@ -50,7 +48,7 @@ class PartJoo_Sync_Orchestrator {
         $domain = trim( (string) $this->config->get( 'domain' ) );
 
         if ( '' === $domain ) {
-            $this->state->save_last_status( [
+            $this->logger->save_last_status( [
                 'time' => current_time( 'mysql' ),
                 'ok'   => false,
                 'msg'  => 'Missing required domain',
@@ -130,7 +128,7 @@ class PartJoo_Sync_Orchestrator {
 
     private function dispatch_payload( array $payload, $context ) {
         $response = $this->api_client->send( $payload );
-        $this->logger->save_last_status( $response, $this->is_response_ok( $response ) );
+        $this->logger->record_http_status( $response, $this->is_response_ok( $response ) );
 
         do_action( 'partjoo_sync_response', $response, $payload, $context );
 
