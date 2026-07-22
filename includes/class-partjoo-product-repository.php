@@ -83,4 +83,5 @@ class PartJoo_Product_Repository {
     public function update_signature_current( $product_id, $signature ) {
         $this->update_meta( $product_id, '_partjoo_sig_current', $signature );
     }
+    
 }

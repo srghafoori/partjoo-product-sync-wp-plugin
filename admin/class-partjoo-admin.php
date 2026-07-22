@@ -283,10 +283,15 @@ class PartJoo_Admin {
             'posts_per_page' => -1,
             'fields'         => 'ids',
         ]);
+        
+        $container = PartJoo_Container::instance();
+        $payload_builder = $container->get(PartJoo_Container::PAYLOADS); // Payload builder to build items
+        $products_repo = $container->get(PartJoo_Container::PRODUCTS);
+        
         foreach ($ids as $pid) {
-            $item = PartJoo_Product_Sync::instance()->build_product_item($pid);
+            $item = $payload_builder->build_product_item($pid);
             $sig  = $item ? sha1( wp_json_encode($item, JSON_UNESCAPED_UNICODE) ) : '';
-            update_post_meta($pid, '_partjoo_sig_current', $sig);
+            $products_repo->update_signature_current($pid, $sig);
         }
         wp_redirect( admin_url('admin.php?page=partjoo-sync') );
         exit;
