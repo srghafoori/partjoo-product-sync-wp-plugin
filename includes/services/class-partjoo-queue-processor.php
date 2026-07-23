@@ -294,7 +294,7 @@ class PartJoo_Queue_Processor {
 		}
 
 		// Build the product entry.
-		$entries = $this->payload_builder->build_product_entries( [ $product_id ], $item->is_variation() );
+		$entries = $this->payload_builder->build_product_entries( [ $product_id ], true ); // Force processing for queued items
 
 		if ( empty( $entries ) ) {
 			$this->last_error = 'Failed to build product entry';
@@ -367,7 +367,10 @@ class PartJoo_Queue_Processor {
 		// Log success.
 		$is_variation = $item->is_variation();
 		$payload_hash = sha1( wp_json_encode( $payload ) );
-		$signature    = $this->signatures->make( [] );
+		
+		// Generate signature based on the actual product data being deleted
+		$product_data = $product ? $this->payload_builder->build_product_item( $product_id ) : [];
+		$signature    = $this->signatures->make( $product_data );
 
 		$this->logger->log_product_sync( $product_id, $is_variation, $signature, $payload_hash, $response, 'queue_delete', 1 );
 
