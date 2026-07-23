@@ -312,6 +312,14 @@ class PartJoo_Queue_Processor
 
         $payload = $this->payload_builder->build_payload_from_entries($domain, $entries);
 
+        // error_log(
+        //     '[PartJoo][Queue][Payload] ' .
+        //         wp_json_encode(
+        //             $payload,
+        //             JSON_PRETTY_PRINT | JSON_UNESCAPED_UNICODE
+        //         )
+        // );
+
         // Send the payload.
         $response = $this->api_client->send($payload);
 

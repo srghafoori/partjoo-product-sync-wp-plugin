@@ -187,6 +187,8 @@ class PartJoo_Payload_Builder
         }
         if ($stock > 0 || $manage_stock) {
             $item['stock'] = (int) $stock;
+        } else {
+            $item['stock'] = 0;  // Ensure stock field is always present for API validation
         }
         if ($condition) {
             $item['condition'] = (string) $condition;
