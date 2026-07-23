@@ -1,14 +1,16 @@
 <?php
-if ( ! defined( 'ABSPATH' ) ) {
+if (! defined('ABSPATH')) {
     exit;
 }
 
-class PartJoo_Api_Client implements PartJoo_Api_Client_Interface {
+class PartJoo_Api_Client implements PartJoo_Api_Client_Interface
+{
 
     private $config;
     private $transport;
 
-    public function __construct( PartJoo_Config $config, PartJoo_Transport_Interface $transport ) {
+    public function __construct(PartJoo_Config $config, PartJoo_Transport_Interface $transport)
+    {
         $this->config    = $config;
         $this->transport = $transport;
     }
@@ -17,26 +19,37 @@ class PartJoo_Api_Client implements PartJoo_Api_Client_Interface {
      * @param array $payload PartJoo API payload.
      * @return array|WP_Error
      */
-    public function send( array $payload ) {
-        $endpoint = esc_url_raw( $this->config->get( 'endpoint', PartJoo_Product_Sync::DEFAULT_ENDPOINT ) ?: PartJoo_Product_Sync::DEFAULT_ENDPOINT );
-        $headers  = [ 'Content-Type' => 'application/json; charset=utf-8' ];
-        $api_key  = $this->config->get( 'api_key', '' );
+    public function send(array $payload)
+    {
+        $endpoint = esc_url_raw($this->config->get('endpoint', PartJoo_Product_Sync::DEFAULT_ENDPOINT) ?: PartJoo_Product_Sync::DEFAULT_ENDPOINT);
+        $headers  = ['Content-Type' => 'application/json; charset=utf-8'];
+        $api_key  = $this->config->get('api_key', '');
 
-        if ( ! empty( $api_key ) ) {
+        if (! empty($api_key)) {
             $headers['X-PartJoo-Key'] = $api_key;
         }
 
         $args = [
             'timeout' => 20,
             'headers' => $headers,
-            'body'    => wp_json_encode( $payload ),
+            'body'    => wp_json_encode($payload),
         ];
 
-        $response = $this->transport->post( $endpoint, $args );
-        if ( is_wp_error( $response ) || wp_remote_retrieve_response_code( $response ) >= 500 ) {
-            usleep( 200000 );
-            $response = $this->transport->post( $endpoint, $args );
+        error_log(
+            "========== PartJoo Request ==========\n" .
+                wp_json_encode($payload, JSON_PRETTY_PRINT)
+        );
+
+        $response = $this->transport->post($endpoint, $args);
+        if (is_wp_error($response) || wp_remote_retrieve_response_code($response) >= 500) {
+            usleep(200000);
+            $response = $this->transport->post($endpoint, $args);
         }
+
+        error_log(
+            "========== PartJoo Response ==========\n" .
+                wp_remote_retrieve_body($response)
+        );
 
         return $response;
     }
